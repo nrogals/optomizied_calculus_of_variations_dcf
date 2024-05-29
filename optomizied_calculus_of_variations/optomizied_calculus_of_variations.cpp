@@ -109,34 +109,28 @@ constexpr std::array <std::array<double, 22>, 22> upper_part_decomposition = {
                                                                                 };
 
 
-auto calculate_lambdas_and_initial_conditions(vector<double> cash_flows) {
+auto calculate_lambdas_and_initial_conditions(vector<double>& cash_flows) {
 
 
     //Need to do on full vector. 
     //Apply P^-1 operator
     //permutation_decomposition
-    vector<double> lhs = cash_flows;
-    lhs.emplace_back(0);
-    lhs.emplace_back(0);
-    int n = lhs.size();
-    vector<double> permuted_lhs(n, 0.0);
+    cash_flows.emplace_back(0);
+    cash_flows.emplace_back(0);
+    int n = cash_flows.size();
+    vector<double> y(n, 0.0);
     for (int i = 0; i < n; i++) {
         int new_position = permutation_map[i];
-        permuted_lhs[new_position] = lhs.at(i);
+        y[new_position] = cash_flows.at(i);
     }
     
     //permuted_lhs is correct. 
     //Apply L^-1 operator
-    vector<double> y = permuted_lhs;
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < i; j++) {
             y[i] = y[i] - lower_part_decomposition[i][j] * y[j];
         }
         double divisor = lower_part_decomposition[i][i];
-        if (abs(divisor) < EPSILON) {
-            throw exception("Cannot divide by small number");
-        }
-         
         y[i] = y[i] / divisor;
     }
     
@@ -148,11 +142,6 @@ auto calculate_lambdas_and_initial_conditions(vector<double> cash_flows) {
             y[i_index] = y[i_index] - upper_part_decomposition[i_index][j_index] * y[j_index];
         }
         double divisor = upper_part_decomposition[i_index][i_index];
-
-        if (abs(divisor) < EPSILON) {
-            throw exception("Cannot divide by small number");
-        }
-
         y[i_index] = y[i_index] / divisor;
     }
 
@@ -238,7 +227,7 @@ int main() {
     cout << "Tests Run Sucessfully ... \n";
 
 
-    int n = 1000000;
+    int n = 10000000;
     for (int i = 0; i < n; i++) {
         vector<double> cash_flows = { 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0 };
         auto parameters = calculate_lambdas_and_initial_conditions(cash_flows);
