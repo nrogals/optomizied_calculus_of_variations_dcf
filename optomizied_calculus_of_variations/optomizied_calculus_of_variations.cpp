@@ -2,16 +2,6 @@
 Optomizied Calculus Of Variations.
 
 
-
-TODO: Finish by EOD 5-23-2024
-
-
-1. Finish integral
-2. Look at the derivative 
-3. Make it only a few flops upon update to a cash flow, via the derivatives.
-
-
-
 */
 
 #include <vector>
@@ -22,7 +12,6 @@ TODO: Finish by EOD 5-23-2024
 #include <iostream>
 #include <unordered_map>
 #include <assert.h>
-
 using namespace std;
 
 const double EPSILON = 0.01;
@@ -130,8 +119,7 @@ auto calculate_lambdas_and_initial_conditions(vector<double>& cash_flows) {
         for (int j = 0; j < i; j++) {
             y[i] = y[i] - lower_part_decomposition[i][j] * y[j];
         }
-        double divisor = lower_part_decomposition[i][i];
-        y[i] = y[i] / divisor;
+        y[i] = y[i] / lower_part_decomposition[i][i];
     }
     
     //Apply U^-1 operator
@@ -141,14 +129,17 @@ auto calculate_lambdas_and_initial_conditions(vector<double>& cash_flows) {
             int j_index = n - 1 - j;
             y[i_index] = y[i_index] - upper_part_decomposition[i_index][j_index] * y[j_index];
         }
-        double divisor = upper_part_decomposition[i_index][i_index];
-        y[i_index] = y[i_index] / divisor;
+        y[i_index] = y[i_index] / upper_part_decomposition[i_index][i_index];
     }
 
-    vector<double> lambdas(n - 2, 0.0);
-    for (int i = 0; i < n - 2; i++) {
-        lambdas[i] = y[i];
-    }
+
+    
+    // Starting and Ending iterators
+    auto start = y.begin();
+    auto end = y.begin() + n - 2;
+    vector<double> lambdas(n-2, 0.0);
+    copy(start, end, lambdas.begin());
+
     
     double c_0 = y[n - 2];
     double c_0_prime = y[n - 1];
@@ -227,7 +218,7 @@ int main() {
     cout << "Tests Run Sucessfully ... \n";
 
 
-    int n = 10000000;
+    int n = 1000000;
     for (int i = 0; i < n; i++) {
         vector<double> cash_flows = { 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0 };
         auto parameters = calculate_lambdas_and_initial_conditions(cash_flows);
