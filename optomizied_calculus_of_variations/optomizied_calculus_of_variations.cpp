@@ -12,6 +12,8 @@ Optomizied Calculus Of Variations.
 #include <iostream>
 #include <unordered_map>
 #include <assert.h>
+
+
 using namespace std;
 
 const double EPSILON = 0.01;
@@ -98,12 +100,34 @@ constexpr std::array <std::array<double, 22>, 22> upper_part_decomposition = {
                                                                                 };
 
 
+constexpr int number_of_cash_flows = 20;
+std::array<double, number_of_cash_flows> precomputed_exponential_weights;
+
+
+double calculate_exponential_weight_for_index(int index, double wacc) {
+    double exponential_integral = 0.0;
+    if (abs(wacc) < EPSILON) {
+        exponential_integral = 1.0;
+    }
+    else {
+        double r = log(1 + wacc);
+        exponential_integral = 1.0 / r * exp(-r * index) * (exp(r) - 1);
+    }
+
+    return exponential_integral;
+}
+
+void populate_precomputed_exponential_weights(double wacc) {
+
+
+    for (int i = 0; i < number_of_cash_flows; i++) {
+        precomputed_exponential_weights[i] = calculate_exponential_weight_for_index(i, wacc);
+    }
+}
+
+
 auto calculate_lambdas_and_initial_conditions(vector<double>& cash_flows) {
 
-
-    //Need to do on full vector. 
-    //Apply P^-1 operator
-    //permutation_decomposition
     cash_flows.emplace_back(0);
     cash_flows.emplace_back(0);
     int n = cash_flows.size();
@@ -113,8 +137,6 @@ auto calculate_lambdas_and_initial_conditions(vector<double>& cash_flows) {
         y[new_position] = cash_flows.at(i);
     }
     
-    //permuted_lhs is correct. 
-    //Apply L^-1 operator
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < i; j++) {
             y[i] = y[i] - lower_part_decomposition[i][j] * y[j];
@@ -122,7 +144,6 @@ auto calculate_lambdas_and_initial_conditions(vector<double>& cash_flows) {
         y[i] = y[i] / lower_part_decomposition[i][i];
     }
     
-    //Apply U^-1 operator
     for (int i = 0; i < n; i++) {
         int i_index = n - 1 - i;
         for (int j = 0; j < i; j++) {
@@ -132,9 +153,6 @@ auto calculate_lambdas_and_initial_conditions(vector<double>& cash_flows) {
         y[i_index] = y[i_index] / upper_part_decomposition[i_index][i_index];
     }
 
-
-    
-    // Starting and Ending iterators
     auto start = y.begin();
     auto end = y.begin() + n - 2;
     vector<double> lambdas(n-2, 0.0);
@@ -180,15 +198,80 @@ inline double calculate_c_t_via_parameters(double t, vector<double> lambdas) {
     return val;
 }
 
+inline double calculate_integral_of_c_t_via_parameters(const vector<double>& lambdas, double c_0, double c_0_prime, double wacc) {
+
+
+    //The idea here is that after we know the value of floor_t
+    //the number of lambdas are fixed and so the only relevant 
+    //term is e^-rt
+    double integral_value = 0.0;
+    int n = lambdas.size();
+    double r = log(1 + wacc);
+    for (int i = 0; i < n; i++) {
+        
+        // Term 1 integral
+        double term_1_value_i = 0.0;
+        for (int s = 1; s < i; s++) {
+            for (int t = 1; t < s + 1; t++) {
+                term_1_value_i += lambdas[t - 1];
+            }
+            term_1_value_i += lambdas[s] / 2.0;
+        }
+
+        term_1_value_i = term_1_value_i * precomputed_exponential_weights[i];
+        
+        // Term 2 integral
+        double term_2_value_i = 0.0;
+        double leading_coefficient = lambdas[0] / 2.0;
+        if (i == 0) {
+            term_2_value_i = leading_coefficient * ((1 - exp(-r)) / r);
+        }
+        else {
+            //Need to calculate integral from i = i to i+1, where i >0
+            //of lambda[0] / 2 * t^2 * e^-rt
+            // f(x) = x^2 * e^-rx
+            double integral_of_f_x = exp(-r * i) * (r * i * (r * i + 2) + 2) + exp(-r * (i + 1)) * (-r * (i + 1) * (r * i + r + 2) - 2);
+            term_2_value_i = leading_coefficient * integral_of_f_x;
+        }
+
+        //Term 3 integral
+        double term_3_value_i = 0.0;
+        if (i >= 1) {
+            
+            //Calculate the first term of term 3
+            double linear_function_exponential_discount = 0.5 * lambdas[i] * exp(-r * i) * pow(r, -2) * (1 - exp(-1 * r) * (r + 1));
+            double first_term_of_term_3 = linear_function_exponential_discount;
+            double lambda_sum = 0.0; 
+            for (int s = 1; s <= i; s++) {
+                lambda_sum += lambdas[s];
+            }
+            double second_term_of_term_3 = lambda_sum * linear_function_exponential_discount;
+            term_3_value_i = first_term_of_term_3 + second_term_of_term_3;
+
+        }
+
+        integral_value += (term_1_value_i + term_2_value_i + term_3_value_i);
+
+        
+    }
+
+
+    // TODO: Add additional value for the gobal c(0) term and the global c'(0)t term.
+
+
+
+    return integral_value;
+
+
+}
+
+
 
 auto calculate_parameterizied_cash_flow(double t, vector<double>& lambdas, double c_0, double c_0_prime) {
     return calculate_c_t_via_parameters(t, lambdas) + c_0_prime * t + c_0;
 };
 
 
-
-// TODO: Consider if more testing is appropiate. 
-// Add the integral 
 bool run_tests() {
 
 
@@ -203,10 +286,13 @@ bool run_tests() {
     double true_c_t_at_ten = 63.63;
     bool nineteen_values_close = (abs(c_t_at_nineteen - true_c_t_at_nineteen) < EPSILON);
     bool ten_values_close = (abs(c_t_at_ten - true_c_t_at_ten) < EPSILON);
+    double wacc = 0.05;
+    double continuous_discounted_cash_flow = calculate_integral_of_c_t_via_parameters(lambdas, c_0, c_0_prime, wacc);
+    assert(continuous_discounted_cash_flow > 0);
+
     return nineteen_values_close and ten_values_close;
 
 }
-
 
 
 
@@ -217,11 +303,17 @@ int main() {
     assert(tests_run_sucessfully);
     cout << "Tests Run Sucessfully ... \n";
 
+    double wacc = 0.05;
+    populate_precomputed_exponential_weights(wacc);
+
 
     int n = 1000000;
     for (int i = 0; i < n; i++) {
         vector<double> cash_flows = { 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0 };
-        auto parameters = calculate_lambdas_and_initial_conditions(cash_flows);
+        //Use structured binding here. 
+        const auto [lambdas, c_0, c_0_prime] = calculate_lambdas_and_initial_conditions(cash_flows);
+        
+        //calculate_integral_of_c_t_via_parameters(lambdas, c_0, c_0_prime, wacc);
 
     }
 }
