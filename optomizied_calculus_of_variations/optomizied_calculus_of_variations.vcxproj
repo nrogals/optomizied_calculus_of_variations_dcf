@@ -130,6 +130,9 @@
   <ItemGroup>
     <ClCompile Include="optomizied_calculus_of_variations.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\..\..\Downloads\Improvement_to_Discounted_Cash_Flow (3).pdf" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
