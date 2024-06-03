@@ -12,6 +12,16 @@ Optomizied Calculus Of Variations.
 #include <iostream>
 #include <unordered_map>
 #include <assert.h>
+#include <cassert>
+
+#include <iostream>
+#include <iomanip>
+#include <chrono>
+#include <thread>
+
+using namespace std;
+using namespace std::chrono;
+
 
 
 using namespace std;
@@ -111,7 +121,8 @@ double calculate_exponential_weight_for_index(int index, double wacc) {
     }
     else {
         double r = log(1 + wacc);
-        exponential_integral = 1.0 / r * exp(-r * index) * (exp(r) - 1);
+        exponential_integral = (1.0 / r) * exp(-r * (index + 1)) * (exp(r) - 1);
+        //These look incorrect. 
     }
 
     return exponential_integral;
@@ -133,8 +144,7 @@ auto calculate_lambdas_and_initial_conditions(vector<double>& cash_flows) {
     int n = cash_flows.size();
     vector<double> y(n, 0.0);
     for (int i = 0; i < n; i++) {
-        int new_position = permutation_map[i];
-        y[new_position] = cash_flows.at(i);
+        y[permutation_map[i]] = cash_flows.at(i);
     }
     
     for (int i = 0; i < n; i++) {
@@ -179,9 +189,10 @@ inline double calculate_c_t_via_parameters(double t, vector<double> lambdas) {
         val += lambdas[i] / 2.0;
     }
     
-    val += std::min(pow(t, 2.0), 1.0) * lambdas[0] / 2.0;
+    double squared_term = std::min(pow(t, 2.0), 1.0) * lambdas[0] / 2.0;
+    val += squared_term;
 
-    int intermediate_val = 0;
+    double intermediate_val = 0;
     if (t >= 1) {
         for (int i = 1; i < floor(t) + 1; i++) {
             intermediate_val += lambdas[i - 1];
@@ -198,67 +209,106 @@ inline double calculate_c_t_via_parameters(double t, vector<double> lambdas) {
     return val;
 }
 
-inline double calculate_integral_of_c_t_via_parameters(const vector<double>& lambdas, double c_0, double c_0_prime, double wacc) {
+
+//Need to calculate integral from i = i to i+1, where i >0
+//of lambda[0] / 2 * t^2 * e^-rt
+// f(x) = x^2 * e^-rx dx
+
+double indefinite_integral(double r, int t) {
+    auto val = -1 * exp(-r * t) * (pow(r, 2) * pow(t, 2) + 2 * r * t + 2) / pow(r, 3);
+    return val;
+}
+
+double calculate_period_integral_for_specific_integral(double r, int period) {
+    
+    auto integral_begin = indefinite_integral(r, period);
+    auto integral_end = indefinite_integral(r, period + 1);
+    auto integral = integral_end - integral_begin;
+    return integral;
+}
 
 
-    //The idea here is that after we know the value of floor_t
-    //the number of lambdas are fixed and so the only relevant 
-    //term is e^-rt
+
+double calculate_integral_for_period(int period, double r, const vector<double>& lambdas) {
+    
     double integral_value = 0.0;
-    int n = lambdas.size();
-    double r = log(1 + wacc);
-    for (int i = 0; i < n; i++) {
-        
-        // Term 1 integral
-        double term_1_value_i = 0.0;
-        for (int s = 1; s < i; s++) {
-            for (int t = 1; t < s + 1; t++) {
-                term_1_value_i += lambdas[t - 1];
-            }
-            term_1_value_i += lambdas[s] / 2.0;
+
+    double term_1_value_i = 0.0;
+    for (int s = 1; s < period; s++) {
+        for (int t = 1; t < s + 1; t++) {
+            term_1_value_i += lambdas[t - 1];
+        }
+        term_1_value_i += lambdas[s] / 2.0;
+    }
+
+    term_1_value_i = term_1_value_i * (exp(r) - 1) * exp(-r * (period + 1)) / r;
+
+    double term_2_value_i = 0.0;
+    if (period >= 1) {
+        term_2_value_i = (lambdas[0] / 2.0) * (exp(r) - 1) * (exp(-r * (period + 1))) / r;
+    }
+    else {
+        double integral_of_f_x = calculate_period_integral_for_specific_integral(r, period);
+        term_2_value_i = (lambdas[0] / 2.0) * integral_of_f_x;
+    }
+    
+    
+    double term_3_value_i = 0.0;
+    if (period >= 1) {
+        double linear_term_lambdas = 0.0;
+        for (int s = 1; s < period + 1; s++) {
+            linear_term_lambdas += lambdas[s - 1];
         }
 
-        term_1_value_i = term_1_value_i * precomputed_exponential_weights[i];
-        
-        // Term 2 integral
-        double term_2_value_i = 0.0;
-        double leading_coefficient = lambdas[0] / 2.0;
-        if (i == 0) {
-            term_2_value_i = leading_coefficient * ((1 - exp(-r)) / r);
-        }
-        else {
-            //Need to calculate integral from i = i to i+1, where i >0
-            //of lambda[0] / 2 * t^2 * e^-rt
-            // f(x) = x^2 * e^-rx
-            double integral_of_f_x = exp(-r * i) * (r * i * (r * i + 2) + 2) + exp(-r * (i + 1)) * (-r * (i + 1) * (r * i + r + 2) - 2);
-            term_2_value_i = leading_coefficient * integral_of_f_x;
-        }
-
-        //Term 3 integral
-        double term_3_value_i = 0.0;
-        if (i >= 1) {
-            
-            //Calculate the first term of term 3
-            double linear_function_exponential_discount = 0.5 * lambdas[i] * exp(-r * i) * pow(r, -2) * (1 - exp(-1 * r) * (r + 1));
-            double first_term_of_term_3 = linear_function_exponential_discount;
-            double lambda_sum = 0.0; 
-            for (int s = 1; s <= i; s++) {
-                lambda_sum += lambdas[s];
-            }
-            double second_term_of_term_3 = lambda_sum * linear_function_exponential_discount;
-            term_3_value_i = first_term_of_term_3 + second_term_of_term_3;
-
-        }
-
-        integral_value += (term_1_value_i + term_2_value_i + term_3_value_i);
-
+        double linear_discount = exp(-r * period) * pow(r, -2) * (1 - exp(-r) * (r + 1));
+        double squared_discount = exp(-r * period) * pow(r,-3) * (2 - exp(-r) * (pow(r,2) + 2 * r + 2));
+        term_3_value_i = linear_term_lambdas * linear_discount + 0.5 * lambdas[period] * squared_discount;
         
     }
 
 
-    // TODO: Add additional value for the gobal c(0) term and the global c'(0)t term.
+    integral_value = term_1_value_i + term_2_value_i + term_3_value_i;
+
+    return integral_value;
 
 
+
+}
+
+
+inline double calculate_integral_of_c_t_via_parameters(const vector<double>& lambdas, double c_0, double c_0_prime, double wacc) {
+    
+    double integral_value = 0.0;
+    int n = lambdas.size();
+    double r = log(1 + wacc);
+    for (int i = 0; i < n; i++) {
+        double period_integral = calculate_integral_for_period(i, r, lambdas);
+        integral_value += period_integral;
+    }
+
+    //Add the c(0) term. 
+    double c_0_term = c_0 * (1 - exp(-n * r)) * (1 / r);
+    integral_value += c_0_term;
+    
+    return integral_value;
+}
+
+auto calculate_parameterizied_cash_flow(double t, vector<double>& lambdas, double c_0, double c_0_prime) {
+    return calculate_c_t_via_parameters(t, lambdas) + c_0_prime * t + c_0;
+};
+
+double calculate_integral_numerically(double start_time, double end_time, vector<double>& lambdas, double c_0, double c_0_prime, double wacc) {
+
+    int n_iter = 100000;
+    double interval_size = end_time - start_time;
+    double h = (double) interval_size / n_iter; 
+    double integral_value = 0.0;
+    double r = log(1 + wacc);
+    for (int i = 0; i < n_iter; i++) {
+        auto t = start_time + i * h;
+        auto c_t = calculate_parameterizied_cash_flow(t, lambdas, c_0, c_0_prime);
+        integral_value += c_t * h * exp(-r * t);
+    }
 
     return integral_value;
 
@@ -267,13 +317,20 @@ inline double calculate_integral_of_c_t_via_parameters(const vector<double>& lam
 
 
 
-auto calculate_parameterizied_cash_flow(double t, vector<double>& lambdas, double c_0, double c_0_prime) {
-    return calculate_c_t_via_parameters(t, lambdas) + c_0_prime * t + c_0;
-};
+
+
+
 
 
 bool run_tests() {
 
+
+    double r = 0.04;
+    int period = 5;
+    auto period_integral = calculate_period_integral_for_specific_integral(r, period);
+    //integrate.quad(lambda t: t**2 * np.exp(t * -0.04), 5, 6) = 24.31
+    auto actual_integral = 24.315;
+    assert(abs(actual_integral - period_integral) < EPSILON);
 
     vector<double> cash_flows = { 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0 };
     auto parameters = calculate_lambdas_and_initial_conditions(cash_flows);
@@ -286,9 +343,24 @@ bool run_tests() {
     double true_c_t_at_ten = 63.63;
     bool nineteen_values_close = (abs(c_t_at_nineteen - true_c_t_at_nineteen) < EPSILON);
     bool ten_values_close = (abs(c_t_at_ten - true_c_t_at_ten) < EPSILON);
+
+    
+    
+
     double wacc = 0.05;
     double continuous_discounted_cash_flow = calculate_integral_of_c_t_via_parameters(lambdas, c_0, c_0_prime, wacc);
-    assert(continuous_discounted_cash_flow > 0);
+
+    
+
+    vector<double> cash_flows_v2 = { 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0 };
+    auto parameters_v2 = calculate_lambdas_and_initial_conditions(cash_flows_v2);
+    auto lambdas_v2 = std::get<0>(parameters_v2);
+    auto c_0_v2 = std::get<1>(parameters_v2);
+    auto c_0_prime_v2 = std::get<2>(parameters_v2);
+    auto integral_val_via_numerical = calculate_integral_numerically(0, 20, lambdas_v2, c_0_v2, c_0_prime_v2, wacc);
+    auto integral_val_via_analytical = calculate_integral_of_c_t_via_parameters(lambdas_v2, c_0_v2, c_0_prime_v2, wacc);
+
+    assert(abs(integral_val_via_numerical - integral_val_via_analytical) < EPSILON);
 
     return nineteen_values_close and ten_values_close;
 
@@ -303,19 +375,28 @@ int main() {
     assert(tests_run_sucessfully);
     cout << "Tests Run Sucessfully ... \n";
 
-    double wacc = 0.05;
-    populate_precomputed_exponential_weights(wacc);
-
-
-    int n = 1000000;
+    cout << "Staring Calculations  ... \n";
+    auto start = high_resolution_clock::now();
+    int n = 100;
     for (int i = 0; i < n; i++) {
         vector<double> cash_flows = { 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0 };
         //Use structured binding here. 
         const auto [lambdas, c_0, c_0_prime] = calculate_lambdas_and_initial_conditions(cash_flows);
-        
-        //calculate_integral_of_c_t_via_parameters(lambdas, c_0, c_0_prime, wacc);
+        auto wacc = 0.05;
+        double continuous_dcf = calculate_integral_of_c_t_via_parameters(lambdas, c_0, c_0_prime, wacc);
 
     }
+
+    cout << "Calculations Finished ... \n";
+
+
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+    cout << "Start time: " << duration_cast<microseconds>(start.time_since_epoch()).count() << endl;
+    cout << "End time: " << duration_cast<microseconds>(stop.time_since_epoch()).count() << endl;
+    cout << "Time taken by Integral Calculations : " << duration.count() / 1000000.0 << " seconds" << endl;
+
+
 }
 
 
