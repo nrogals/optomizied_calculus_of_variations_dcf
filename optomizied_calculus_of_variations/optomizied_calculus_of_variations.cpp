@@ -1,5 +1,11 @@
 /*
-Optomizied Calculus Of Variations.
+The discounted cash flow is a very important valuation tool in 
+the financial industry. 
+
+A more advanced continuous-time discounted cash flow was created 
+that relies on the calculus of variations.
+
+
 
 
 */
@@ -312,15 +318,7 @@ double calculate_integral_numerically(double start_time, double end_time, vector
 
     return integral_value;
 
-
 }
-
-
-
-
-
-
-
 
 bool run_tests() {
 
@@ -375,9 +373,9 @@ int main() {
     assert(tests_run_sucessfully);
     cout << "Tests Run Sucessfully ... \n";
 
-    cout << "Staring Calculations  ... \n";
+    cout << "Starting Calculations  ... \n";
     auto start = high_resolution_clock::now();
-    int n = 100;
+    int n = 10000000;
     for (int i = 0; i < n; i++) {
         vector<double> cash_flows = { 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0 };
         //Use structured binding here. 
